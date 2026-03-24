@@ -6,6 +6,8 @@ import {
   PageSidebarBody,
   Masthead,
   MastheadMain,
+  MastheadBrand,
+  MastheadLogo,
   MastheadContent,
   Nav,
   NavList,
@@ -32,6 +34,9 @@ import {
   Split,
   SplitItem,
   Flex,
+  ToggleGroup,
+  ToggleGroupItem,
+  Tooltip,
 } from '@patternfly/react-core';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import ClipboardListIcon from '@patternfly/react-icons/dist/esm/icons/clipboard-list-icon';
@@ -42,6 +47,7 @@ import AngleRightIcon from '@patternfly/react-icons/dist/esm/icons/angle-right-i
 import InfoCircleIcon from '@patternfly/react-icons/dist/esm/icons/info-circle-icon';
 import TasksIcon from '@patternfly/react-icons/dist/esm/icons/tasks-icon';
 import workplanImported from './workplan.md?raw';
+import rhdhLogoUrl from './rhdh_logo.png?url';
 
 const workplanMarkdown =
   typeof workplanImported === 'string'
@@ -49,12 +55,45 @@ const workplanMarkdown =
     : String(workplanImported?.default ?? '');
 
 const navTabs = [
-  { id: 'audit', label: 'Component audit', Icon: ClipboardListIcon },
-  { id: 'mapping', label: 'PF6 token mapping', Icon: MapMarkedIcon },
-  { id: 'blockers', label: 'Technical blockers', Icon: ExclamationTriangleIcon },
-  { id: 'strategy', label: 'Implementation', Icon: LayerGroupIcon },
-  { id: 'workplan', label: 'Work Plan', Icon: TasksIcon },
+  {
+    id: 'audit',
+    label: 'Component audit',
+    Icon: ClipboardListIcon,
+    tooltip:
+      'Component audit: A status-tracked table comparing MUI components currently in RHDH against their BUI equivalents.',
+  },
+  {
+    id: 'mapping',
+    label: 'PF6 token mapping',
+    Icon: MapMarkedIcon,
+    tooltip:
+      'Token mapping: Visual cards showing how BUI design tokens (like background and spacing) map directly to PatternFly CSS variables.',
+  },
+  {
+    id: 'blockers',
+    label: 'Technical blockers',
+    Icon: ExclamationTriangleIcon,
+    tooltip:
+      'Technical blockers: A highlighted list of high-priority gaps (like the DataGrid) that need upstream attention.',
+  },
+  {
+    id: 'strategy',
+    label: 'Implementation',
+    Icon: LayerGroupIcon,
+    tooltip:
+      'Implementation strategy: A phased roadmap detailing the "Parallel Life" approach using CSS namespacing and hybrid theme providers.',
+  },
+  {
+    id: 'workplan',
+    label: 'Work Plan',
+    Icon: TasksIcon,
+    tooltip:
+      'Work plan: Phases, goals, and tasks from workplan.md for structured migration tracking in this dashboard.',
+  },
 ];
+
+/** High-priority BUI↔PF pairings in scope for RHDH (subset of the full https://ui.backstage.io/tokens catalog). Raise as migration scope grows. */
+const BUI_PF_PRIORITY_PAIR_TARGET = 62;
 
 /** Split workplan.md into phases (file is one line; phases/tasks are delimited in text). */
 function parseWorkplan(raw) {
@@ -78,28 +117,326 @@ function parseWorkplan(raw) {
   return { intro, phases };
 }
 
+const TOKEN_SWATCH_FRAME = {
+  width: '2rem',
+  height: '2rem',
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  overflow: 'hidden',
+  boxSizing: 'border-box',
+};
+
+function tokenPreviewKind(token) {
+  const { pf, group } = token;
+  if (group === 'Breakpoint') return 'breakpoint';
+  if (group === 'Radii' || pf.includes('border--radius')) return 'radius';
+  if (group === 'Focus') return 'focus';
+  if (group.includes('Spacing')) return 'spacing';
+  if (group === 'Border') return 'border';
+  if (group === 'Typography') return pf.includes('font--weight') ? 'fontWeight' : 'fontFamily';
+  if (group === 'Text' || pf.includes('text--color')) return 'foreground';
+  return 'background';
+}
+
+/** Renders a 2rem preview driven by the PatternFly variable on each mapping row. */
+function TokenPreviewSwatch({ token }) {
+  const { pf, example } = token;
+  const kind = tokenPreviewKind(token);
+  const v = (name) => `var(${name})`;
+  const radiusPxFallback =
+    example && /^[\d.]+px$/.test(String(example).trim()) ? String(example).trim() : '4px';
+  const radiusWithFallback = `var(${pf}, ${radiusPxFallback})`;
+
+  if (kind === 'background') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          border: '1px solid var(--pf-t--global--border--color--default)',
+          backgroundColor: v(pf),
+        }}
+      />
+    );
+  }
+
+  if (kind === 'foreground') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          border: '1px solid var(--pf-t--global--border--color--default)',
+          backgroundColor: 'var(--pf-t--global--background--color--secondary--default)',
+          color: v(pf),
+          fontSize: '13px',
+          fontWeight: 600,
+          fontFamily: 'var(--pf-t--global--font--family--body)',
+        }}
+      >
+        Aa
+      </div>
+    );
+  }
+
+  if (kind === 'border') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          border: `3px solid ${v(pf)}`,
+          backgroundColor: 'var(--pf-t--global--background--color--primary--default)',
+        }}
+      />
+    );
+  }
+
+  if (kind === 'spacing') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          border: '1px dashed var(--pf-t--global--border--color--default)',
+          backgroundColor: 'var(--pf-t--global--background--color--secondary--default)',
+        }}
+      >
+        <div
+          style={{
+            width: v(pf),
+            height: v(pf),
+            minWidth: 1,
+            minHeight: 1,
+            backgroundColor: 'var(--pf-t--global--color--brand--default)',
+            borderRadius: 2,
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (kind === 'radius') {
+    /* Single soft tile on white: subtle PF surface tone so the token’s corner radius reads without a heavy border. */
+    return (
+      <div
+        aria-hidden
+        style={{
+          width: '2.25rem',
+          height: '2.25rem',
+          flexShrink: 0,
+          boxSizing: 'border-box',
+          backgroundColor: 'var(--pf-t--global--background--color--200)',
+          borderRadius: radiusWithFallback,
+        }}
+      />
+    );
+  }
+
+  if (kind === 'focus') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          backgroundColor: 'var(--pf-t--global--background--color--secondary--default)',
+          boxShadow: `0 0 0 2px ${v(pf)}`,
+        }}
+      />
+    );
+  }
+
+  if (kind === 'fontFamily') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          border: '1px solid var(--pf-t--global--border--color--default)',
+          backgroundColor: 'var(--pf-t--global--background--color--primary--default)',
+          fontFamily: v(pf),
+          fontSize: '14px',
+          lineHeight: 1,
+        }}
+      >
+        Aa
+      </div>
+    );
+  }
+
+  if (kind === 'fontWeight') {
+    return (
+      <div
+        aria-hidden
+        style={{
+          ...TOKEN_SWATCH_FRAME,
+          borderRadius: 'var(--pf-t--global--border--radius--small)',
+          border: '1px solid var(--pf-t--global--border--color--default)',
+          backgroundColor: 'var(--pf-t--global--background--color--primary--default)',
+          fontFamily: 'var(--pf-t--global--font--family--body)',
+          fontWeight: v(pf),
+          fontSize: '13px',
+        }}
+      >
+        Aa
+      </div>
+    );
+  }
+
+  const breakpointVars = [
+    '--pf-t--global--breakpoint--250',
+    '--pf-t--global--breakpoint--300',
+    '--pf-t--global--breakpoint--350',
+  ];
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        ...TOKEN_SWATCH_FRAME,
+        flexDirection: 'column',
+        gap: 3,
+        padding: 3,
+        alignItems: 'stretch',
+        justifyContent: 'center',
+        borderRadius: 'var(--pf-t--global--border--radius--small)',
+        border: '1px solid var(--pf-t--global--border--color--default)',
+        backgroundColor: 'var(--pf-t--global--background--color--secondary--default)',
+      }}
+    >
+      {breakpointVars.map((bp) => (
+        <div
+          key={bp}
+          title={bp}
+          style={{
+            height: 5,
+            width: `calc(var(${bp}) / 60)`,
+            maxWidth: '100%',
+            backgroundColor: 'var(--pf-t--global--color--brand--default)',
+            borderRadius: 1,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const BUI_COMPONENT_DOCS = 'https://ui.backstage.io/components';
+
+/** PascalCase BUI component name → kebab-case path (matches https://ui.backstage.io/components/... ). */
+function buiComponentToSlug(name) {
+  const trimmed = name.trim();
+  if (!trimmed || /^n\/?a$/i.test(trimmed)) return null;
+  return trimmed
+    .replace(/([a-z\d])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase();
+}
+
+function BuiEquivalentLinks({ text }) {
+  const parts = String(text ?? '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return (
+    <Content component="small">
+      {parts.map((name, i) => {
+        const slug = buiComponentToSlug(name);
+        const sep = i > 0 ? ', ' : null;
+        if (!slug) {
+          return (
+            <React.Fragment key={`${name}-${i}`}>
+              {sep}
+              {name}
+            </React.Fragment>
+          );
+        }
+        return (
+          <React.Fragment key={`${name}-${i}`}>
+            {sep}
+            <a href={`${BUI_COMPONENT_DOCS}/${slug}`} target="_blank" rel="noopener noreferrer">
+              {name}
+            </a>
+          </React.Fragment>
+        );
+      })}
+    </Content>
+  );
+}
+
 const App = () => {
   const [activeTab, setActiveTab] = useState('audit');
+  const [auditStatusFilter, setAuditStatusFilter] = useState('all');
   const workplan = useMemo(() => parseWorkplan(workplanMarkdown), []);
 
   const auditData = [
-    { mui: 'Button', bui: 'Button', status: 'ready', criticality: 'High', notes: 'BUI Button is stable and aligns with PF6 core styles.' },
-    { mui: 'Table', bui: 'Table', status: 'progress', criticality: 'High', notes: 'BUI Table lacks PF6-specific bulk selection and composable cell features.' },
-    { mui: 'TextField / Select', bui: 'Form Controls', status: 'ready', criticality: 'High', notes: 'Standard inputs ready; must map to PF6 form-control variables.' },
-    { mui: 'DataGrid', bui: 'N/A', status: 'missing', criticality: 'Critical', notes: 'Significant gap for PF6-style data management views.' },
-    { mui: 'Dialog / Modal', bui: 'Modal', status: 'ready', criticality: 'Medium', notes: 'BUI Modal is functional; needs PF6 backdrop variable overrides.' },
-    { mui: 'Box / Grid', bui: 'Layout / Box', status: 'ready', criticality: 'High', notes: 'PF6 layout system is highly compatible with BUI Box.' },
-    { mui: 'Autocomplete', bui: 'Search / Select', status: 'missing', criticality: 'High', notes: 'Required for entity picking; PF6 Select behavior preferred.' },
+    { mui: 'Button / IconButton', bui: 'Button, ButtonIcon', status: 'ready', criticality: 'High', notes: 'BUI covers primary actions and icon-only controls; verify focus ring vs PF6.' },
+    { mui: 'Table', bui: 'Table', status: 'progress', criticality: 'High', notes: 'BUI Table lacks PF6-style bulk selection, expandable rows, and dense data-grid tooling.' },
+    { mui: 'TextField / Select', bui: 'TextField, Select, PasswordField', status: 'ready', criticality: 'High', notes: 'Documented form controls; map heights and borders to PF6 form tokens.' },
+    { mui: 'DataGrid', bui: 'N/A', status: 'missing', criticality: 'Critical', notes: 'No BUI DataGrid; RHDH filtering, column resize, and virtualization need a strategy (Table + patterns vs third-party).' },
+    { mui: 'Dialog / Modal', bui: 'Dialog', status: 'ready', criticality: 'Medium', notes: 'BUI Dialog exists (not named Modal); align overlay, spacing, and header with PF6 Modal.' },
+    { mui: 'Box / Grid / Stack', bui: 'Box, Flex, Grid, Container', status: 'ready', criticality: 'High', notes: 'Layout primitives match BUI surface model; responsive prop objects align with useBreakpoint.' },
+    { mui: 'Autocomplete', bui: 'SearchAutocomplete, Select', status: 'progress', criticality: 'High', notes: 'SearchAutocomplete covers search-style comboboxes; full MUI Autocomplete (free solo, multi-chip) may still gap—validate entity pickers.' },
+    { mui: 'Typography', bui: 'Text', status: 'progress', criticality: 'High', notes: 'Use BUI Text for body and headings; confirm scale vs PF6 title and content typography.' },
+    { mui: 'Tabs', bui: 'Tabs', status: 'ready', criticality: 'Medium', notes: 'Available in BUI; check tab list spacing and active indicator vs PF6 Tabs.' },
+    { mui: 'Card / Paper', bui: 'Card', status: 'ready', criticality: 'High', notes: 'BUI Card participates in neutral surface stacking; map elevation to PF6 cards.' },
+    { mui: 'Chip / Filter', bui: 'TagGroup', status: 'progress', criticality: 'Medium', notes: 'TagGroup is the closest chip-like primitive; PF6 label/filter chip patterns may need composition.' },
+    { mui: 'Accordion / ExpansionPanel', bui: 'Accordion', status: 'ready', criticality: 'Medium', notes: 'Map disclosure icons and borders to PF6 expandable sections where needed.' },
+    { mui: 'Alert / Snackbar', bui: 'Alert', status: 'ready', criticality: 'Medium', notes: 'BUI Alert maps status colors; global toast/snackbar may still be app-level.' },
+    { mui: 'Menu / Popover', bui: 'Menu, Popover', status: 'ready', criticality: 'High', notes: 'Overlay positioning and scroll behavior should be checked against PF6 dropdowns.' },
+    { mui: 'List', bui: 'List', status: 'ready', criticality: 'Medium', notes: 'Use for nav-style lists; dense lists in catalog may need Table or custom rows.' },
+    { mui: 'Checkbox / Radio / Switch', bui: 'Checkbox, RadioGroup, Switch', status: 'ready', criticality: 'Medium', notes: 'Form controls present; align touch targets and error states with PF6 forms.' },
+    { mui: 'AppBar / Toolbar', bui: 'Header, PluginHeader', status: 'progress', criticality: 'High', notes: 'Backstage-specific headers; theming must coexist with PF6 Masthead patterns in shell plugins.' },
+    { mui: 'Skeleton / Progress', bui: 'Skeleton', status: 'progress', criticality: 'Low', notes: 'Skeleton only; linear or circular progress may need PF6 Progress or custom tokens.' },
+    { mui: 'Link', bui: 'Link, ButtonLink', status: 'ready', criticality: 'Low', notes: 'Inline links and link-styled buttons covered.' },
+    { mui: 'Tooltip', bui: 'Tooltip', status: 'ready', criticality: 'Low', notes: 'Verify delay and contrast vs PF6 Tooltip.' },
+    { mui: 'Search field', bui: 'SearchField', status: 'ready', criticality: 'Medium', notes: 'Dedicated search input; pair with SearchAutocomplete where catalog search matches.' },
+    { mui: 'Toggle group', bui: 'ToggleButton, ToggleButtonGroup', status: 'ready', criticality: 'Low', notes: 'Use for segmented controls; PF6 toggle group spacing may differ.' },
+    { mui: 'Avatar', bui: 'Avatar', status: 'ready', criticality: 'Low', notes: 'Present; size tokens should follow neutral scale.' },
   ];
 
+  const filteredAuditData =
+    auditStatusFilter === 'all'
+      ? auditData
+      : auditData.filter((item) => item.status === auditStatusFilter);
+
   const tokenMapping = [
-    { group: 'Colors', bui: 'color.background.canvas', pf: '--pf-v6-global--BackgroundColor--100', example: '#FFFFFF' },
-    { group: 'Colors', bui: 'color.text.primary', pf: '--pf-v6-global--Color--100', example: '#151515' },
-    { group: 'Spacing', bui: 'spacing.md (8px)', pf: '--pf-v6-global--spacer--md', example: '8px' },
-    { group: 'Radii', bui: 'border.radius.sm', pf: '--pf-v6-global--BorderRadius--sm', example: '3px' },
-    { group: 'Elevation', bui: 'shadow.card', pf: '--pf-v6-global--BoxShadow--sm', example: '0 2px 4px...' },
-    { group: 'Brand', bui: 'color.background.brand', pf: '--pf-v6-global--primary-color--100', example: '#0066CC' },
+    { group: 'Canvas / app bg', bui: '--bui-bg-app', pf: '--pf-t--global--background--color--primary--default', example: 'Page canvas' },
+    { group: 'Surfaces', bui: '--bui-bg-neutral-1', pf: '--pf-t--global--background--color--secondary--default', example: 'Cards / dialogs' },
+    { group: 'Surfaces', bui: '--bui-bg-neutral-2', pf: '--pf-t--global--background--color--secondary--hover', example: 'Nested surface' },
+    { group: 'Text', bui: '--bui-fg-primary', pf: '--pf-t--global--text--color--regular', example: 'Body text' },
+    { group: 'Text', bui: '--bui-fg-secondary', pf: '--pf-t--global--text--color--200', example: 'Muted' },
+    { group: 'Text', bui: '--bui-fg-disabled', pf: '--pf-t--global--text--color--disabled', example: 'Disabled' },
+    { group: 'Brand / solid', bui: '--bui-bg-solid', pf: '--pf-t--global--color--brand--default', example: 'Primary CTA' },
+    { group: 'Status', bui: '--bui-bg-danger', pf: '--pf-t--global--color--status--danger--default', example: 'Danger surface' },
+    { group: 'Status', bui: '--bui-bg-warning', pf: '--pf-t--global--color--status--warning--100', example: 'Warning surface' },
+    { group: 'Status', bui: '--bui-bg-success', pf: '--pf-t--global--color--status--success--100', example: 'Success surface' },
+    { group: 'Status', bui: '--bui-bg-info', pf: '--pf-t--global--color--status--info--100', example: 'Info surface' },
+    { group: 'Border', bui: '--bui-border-1', pf: '--pf-t--global--border--color--default', example: 'Subtle divider' },
+    { group: 'Border', bui: '--bui-border-2', pf: '--pf-t--global--border--color--200', example: 'Stronger rule' },
+    { group: 'Spacing scale', bui: '--bui-space (base)', pf: '--pf-t--global--spacer--100', example: 'Align scales (0.25rem)' },
+    { group: 'Spacing', bui: '--bui-space-4', pf: '--pf-t--global--spacer--300', example: '1rem gap' },
+    { group: 'Radii', bui: '--bui-radius-2', pf: '--pf-t--global--border--radius--tiny', example: '4px' },
+    { group: 'Radii', bui: '--bui-radius-3', pf: '--pf-t--global--border--radius--small', example: '6px' },
+    { group: 'Focus', bui: '--bui-ring', pf: '--pf-t--global--focus-ring--color--default', example: 'Focus ring color' },
+    { group: 'Typography', bui: '--bui-font-regular', pf: '--pf-t--global--font--family--body', example: 'Sans' },
+    { group: 'Typography', bui: '--bui-font-monospace', pf: '--pf-t--global--font--family--mono', example: 'Mono' },
+    { group: 'Typography', bui: '--bui-font-weight-bold', pf: '--pf-t--global--font--weight--body--bold', example: 'Bold' },
+    { group: 'Breakpoint', bui: 'sm/md/lg (640/768/1024)', pf: '--pf-t--global--breakpoint--250/300/350', example: '40rem / 48rem / 60rem' },
   ];
+
+  const tokenMapCoveragePct = Math.min(
+    100,
+    Math.round((tokenMapping.length / BUI_PF_PRIORITY_PAIR_TARGET) * 100),
+  );
 
   const blockers = [
     { title: 'PF6 Component Alignment', description: 'BUI components must be verified against PF6 visual changes, particularly increased whitespace and updated border-radius logic.', priority: 'P0' },
@@ -116,7 +453,7 @@ const App = () => {
     },
     {
       step: 'BUI Token Override',
-      desc: 'Map BUI design tokens directly to --pf-v6 variables using a custom CSS module or JS object in the BUI Provider.',
+      desc: 'Map BUI --bui-* tokens to PatternFly tokens (e.g. --pf-t--global--*) via overrides on the BUI theme or root CSS.',
       tag: 'THEMING',
     },
     {
@@ -156,13 +493,19 @@ const App = () => {
     }
   };
 
-  const swatchIsSpacing = (token) =>
-    token.group === 'Spacing' && token.example.endsWith('px') && !token.example.startsWith('#');
-
   const masthead = (
     <Masthead>
-      {/* Main must be a direct child of Masthead for the grid; keep empty so primary content uses the flexible column. */}
-      <MastheadMain />
+      <MastheadMain>
+        <MastheadBrand>
+          <MastheadLogo>
+            <img
+              src={rhdhLogoUrl}
+              alt="Red Hat Developer Hub"
+              style={{ height: 36, width: 'auto', maxWidth: 'min(280px, 42vw)', objectFit: 'contain', display: 'block' }}
+            />
+          </MastheadLogo>
+        </MastheadBrand>
+      </MastheadMain>
       <MastheadContent>
         <Split hasGutter>
           <SplitItem isFilled>
@@ -191,10 +534,21 @@ const App = () => {
       <PageSidebarBody>
         <Nav aria-label="Migration views" onSelect={(_e, { itemId }) => itemId && setActiveTab(String(itemId))}>
           <NavList>
-            {navTabs.map(({ id, label, Icon }) => (
-              <NavItem key={id} itemId={id} isActive={activeTab === id} to="#" preventDefault icon={<Icon />}>
-                {label}
-              </NavItem>
+            {navTabs.map(({ id, label, Icon, tooltip }) => (
+              <Tooltip
+                key={id}
+                content={tooltip}
+                position="right"
+                entryDelay={200}
+                maxWidth="22rem"
+                enableFlip
+                flipBehavior={['right', 'left', 'top', 'bottom']}
+                isContentLeftAligned
+              >
+                <NavItem itemId={id} isActive={activeTab === id} to="#" preventDefault icon={<Icon />}>
+                  {label}
+                </NavItem>
+              </Tooltip>
             ))}
           </NavList>
         </Nav>
@@ -209,12 +563,15 @@ const App = () => {
                 </Title>
               </Flex>
               <Progress
-                value={35}
-                title="BUI tokens mapped to PF6"
+                value={tokenMapCoveragePct}
+                title="BUI ↔ PF6 reference mappings"
                 measureLocation="outside"
                 size="sm"
               />
-              <Content component="small">35% of BUI tokens successfully mapped to PF6 global variables.</Content>
+              <Content component="small">
+                {tokenMapCoveragePct}% — {tokenMapping.length} priority BUI↔PF pairs in the token mapping view (~
+                {BUI_PF_PRIORITY_PAIR_TARGET} in scope). Measures documented reference rows, not shipped RHDH theme work.
+              </Content>
             </Stack>
           </CardBody>
         </Card>
@@ -243,7 +600,50 @@ const App = () => {
                 ),
               }}
             >
-              <CardTitle>Component audit (MUI → BUI in PF6 context)</CardTitle>
+              <Flex
+                alignItems={{ default: 'alignItemsCenter' }}
+                justifyContent={{ default: 'justifyContentSpaceBetween' }}
+                flexWrap={{ default: 'wrap' }}
+                columnGap={{ default: 'columnGapMd' }}
+                rowGap={{ default: 'rowGapSm' }}
+              >
+                <div style={{ flex: '0 1 auto', maxWidth: 'min(22rem, 42vw)' }}>
+                  <CardTitle>Component audit (MUI → BUI in PF6 context)</CardTitle>
+                </div>
+                <ToggleGroup aria-label="Filter rows by migration status" isCompact>
+                  <ToggleGroupItem
+                    text="All"
+                    isSelected={auditStatusFilter === 'all'}
+                    onChange={(_e, selected) => {
+                      if (selected) setAuditStatusFilter('all');
+                    }}
+                  />
+                  <ToggleGroupItem
+                    text="Ready"
+                    isSelected={auditStatusFilter === 'ready'}
+                    onChange={(_e, selected) => {
+                      if (selected) setAuditStatusFilter('ready');
+                      else if (auditStatusFilter === 'ready') setAuditStatusFilter('all');
+                    }}
+                  />
+                  <ToggleGroupItem
+                    text="In progress"
+                    isSelected={auditStatusFilter === 'progress'}
+                    onChange={(_e, selected) => {
+                      if (selected) setAuditStatusFilter('progress');
+                      else if (auditStatusFilter === 'progress') setAuditStatusFilter('all');
+                    }}
+                  />
+                  <ToggleGroupItem
+                    text="Missing"
+                    isSelected={auditStatusFilter === 'missing'}
+                    onChange={(_e, selected) => {
+                      if (selected) setAuditStatusFilter('missing');
+                      else if (auditStatusFilter === 'missing') setAuditStatusFilter('all');
+                    }}
+                  />
+                </ToggleGroup>
+              </Flex>
             </CardHeader>
             <CardBody>
               <Table aria-label="MUI to BUI component audit" borders>
@@ -257,14 +657,16 @@ const App = () => {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {auditData.map((item) => (
+                  {filteredAuditData.map((item) => (
                     <Tr key={item.mui}>
                       <Td dataLabel="MUI component">
                         <Content component="small">
                           <code>{item.mui}</code>
                         </Content>
                       </Td>
-                      <Td dataLabel="BUI equivalent">{item.bui}</Td>
+                      <Td dataLabel="BUI equivalent">
+                        <BuiEquivalentLinks text={item.bui} />
+                      </Td>
                       <Td dataLabel="Status">
                         <StatusBadge status={item.status} />
                       </Td>
@@ -283,7 +685,7 @@ const App = () => {
         {activeTab === 'mapping' && (
           <Gallery hasGutter minWidths={{ default: '280px', md: '320px' }}>
             {tokenMapping.map((token) => (
-              <GalleryItem key={token.bui}>
+              <GalleryItem key={`${token.group}-${token.bui}`}>
                 <Card isFullHeight>
                   <CardHeader>
                     <Level hasGutter>
@@ -291,29 +693,7 @@ const App = () => {
                         <Label color="red">{token.group}</Label>
                       </LevelItem>
                       <LevelItem>
-                        <div
-                          style={{
-                            width: '2rem',
-                            height: '2rem',
-                            borderRadius: 'var(--pf-t--global--border--radius--small, 4px)',
-                            border: '1px solid var(--pf-t--global--border--color--default, #c7c7c7)',
-                            backgroundColor: token.example.startsWith('#') ? token.example : 'var(--pf-t--global--background--color--secondary--default, #f5f5f5)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {swatchIsSpacing(token) ? (
-                            <span
-                              style={{
-                                width: '0.5rem',
-                                height: '0.5rem',
-                                background: 'var(--pf-t--global--icon--color--subtle, #6a6e73)',
-                                borderRadius: 2,
-                              }}
-                            />
-                          ) : null}
-                        </div>
+                        <TokenPreviewSwatch token={token} />
                       </LevelItem>
                     </Level>
                   </CardHeader>
