@@ -37,6 +37,8 @@ import {
   ToggleGroup,
   ToggleGroupItem,
   Tooltip,
+  FormSelect,
+  FormSelectOption,
 } from '@patternfly/react-core';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import ClipboardListIcon from '@patternfly/react-icons/dist/esm/icons/clipboard-list-icon';
@@ -375,6 +377,7 @@ function BuiEquivalentLinks({ text }) {
 const App = () => {
   const [activeTab, setActiveTab] = useState('audit');
   const [auditStatusFilter, setAuditStatusFilter] = useState('all');
+  const [tokenGroupFilter, setTokenGroupFilter] = useState('all');
   const workplan = useMemo(() => parseWorkplan(workplanMarkdown), []);
 
   const auditData = [
@@ -437,6 +440,15 @@ const App = () => {
     100,
     Math.round((tokenMapping.length / BUI_PF_PRIORITY_PAIR_TARGET) * 100),
   );
+
+  const tokenMappingGroups = [...new Set(tokenMapping.map((t) => t.group))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const filteredTokenMapping =
+    tokenGroupFilter === 'all'
+      ? tokenMapping
+      : tokenMapping.filter((t) => t.group === tokenGroupFilter);
 
   const blockers = [
     { title: 'PF6 Component Alignment', description: 'BUI components must be verified against PF6 visual changes, particularly increased whitespace and updated border-radius logic.', priority: 'P0' },
@@ -683,8 +695,32 @@ const App = () => {
         )}
 
         {activeTab === 'mapping' && (
-          <Gallery hasGutter minWidths={{ default: '280px', md: '320px' }}>
-            {tokenMapping.map((token) => (
+          <Stack hasGutter>
+            <Flex
+              alignItems={{ default: 'alignItemsCenter' }}
+              flexWrap={{ default: 'wrap' }}
+              columnGap={{ default: 'columnGapMd' }}
+              rowGap={{ default: 'rowGapSm' }}
+              justifyContent={{ default: 'justifyContentSpaceBetween' }}
+            >
+              <Content component="p" style={{ margin: 0 }}>
+                Filter by label (same as the red category on each card).
+              </Content>
+              <div style={{ flex: '0 1 auto', minWidth: '12rem', maxWidth: '100%' }}>
+                <FormSelect
+                  value={tokenGroupFilter}
+                  aria-label="Filter token mapping cards by category label"
+                  onChange={(_e, value) => setTokenGroupFilter(value)}
+                >
+                  <FormSelectOption value="all" label="All categories" />
+                  {tokenMappingGroups.map((group) => (
+                    <FormSelectOption key={group} value={group} label={group} />
+                  ))}
+                </FormSelect>
+              </div>
+            </Flex>
+            <Gallery hasGutter minWidths={{ default: '280px', md: '320px' }}>
+            {filteredTokenMapping.map((token) => (
               <GalleryItem key={`${token.group}-${token.bui}`}>
                 <Card isFullHeight>
                   <CardHeader>
@@ -719,7 +755,8 @@ const App = () => {
                 </Card>
               </GalleryItem>
             ))}
-          </Gallery>
+            </Gallery>
+          </Stack>
         )}
 
         {activeTab === 'blockers' && (
