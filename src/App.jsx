@@ -335,6 +335,28 @@ const BUI_COMPONENT_DOCS = 'https://ui.backstage.io/components';
 /** Live Backstage instance showcasing the upstream MUI → BUI migration path. */
 const BUI_MUI_DEMO_URL = 'https://demo.backstage.io/mui-to-bui';
 
+/** Shown on status badges in the audit table and on matching filter toggles. */
+const AUDIT_STATUS_TOOLTIPS = {
+  ready:
+    'BUI covers this MUI area with a clear migration path. Remaining work is mainly PatternFly 6 alignment and design tokens—not a missing primitive.',
+  progress:
+    'BUI exists or partly covers this area, but feature gaps, upstream vs Red Hat branding, or open validation remain before RHDH can treat the row as done.',
+  missing:
+    'No BUI equivalent is listed for this MUI need. Plan a different approach: another component, composition, a third-party grid, or product-specific work.',
+};
+
+const AUDIT_FILTER_ALL_TOOLTIP =
+  'Show every MUI component row in the table, regardless of migration status.';
+
+const auditStatusTooltipProps = {
+  position: 'top',
+  entryDelay: 200,
+  maxWidth: '28rem',
+  enableFlip: true,
+  flipBehavior: ['top', 'bottom', 'left', 'right'],
+  isContentLeftAligned: true,
+};
+
 /** PascalCase BUI component name → kebab-case path (matches https://ui.backstage.io/components/... ). */
 function buiComponentToSlug(name) {
   const trimmed = name.trim();
@@ -523,21 +545,26 @@ const App = () => {
   ];
 
   const StatusBadge = ({ status }) => {
+    const wrap = (node) => (
+      <Tooltip {...auditStatusTooltipProps} content={AUDIT_STATUS_TOOLTIPS[status]}>
+        <span style={{ display: 'inline-block', maxWidth: '100%' }}>{node}</span>
+      </Tooltip>
+    );
     switch (status) {
       case 'ready':
-        return (
+        return wrap(
           <Label color="green" status="success">
             Ready
           </Label>
         );
       case 'progress':
-        return (
+        return wrap(
           <Label color="orange" status="warning">
             In progress
           </Label>
         );
       case 'missing':
-        return (
+        return wrap(
           <Label color="red" status="danger">
             Missing
           </Label>
@@ -671,37 +698,53 @@ const App = () => {
                   <CardTitle>Component audit (MUI → BUI in PF6 context)</CardTitle>
                 </div>
                 <ToggleGroup aria-label="Filter rows by migration status" isCompact>
-                  <ToggleGroupItem
-                    text="All"
-                    isSelected={auditStatusFilter === 'all'}
-                    onChange={(_e, selected) => {
-                      if (selected) setAuditStatusFilter('all');
-                    }}
-                  />
-                  <ToggleGroupItem
-                    text="Ready"
-                    isSelected={auditStatusFilter === 'ready'}
-                    onChange={(_e, selected) => {
-                      if (selected) setAuditStatusFilter('ready');
-                      else if (auditStatusFilter === 'ready') setAuditStatusFilter('all');
-                    }}
-                  />
-                  <ToggleGroupItem
-                    text="In progress"
-                    isSelected={auditStatusFilter === 'progress'}
-                    onChange={(_e, selected) => {
-                      if (selected) setAuditStatusFilter('progress');
-                      else if (auditStatusFilter === 'progress') setAuditStatusFilter('all');
-                    }}
-                  />
-                  <ToggleGroupItem
-                    text="Missing"
-                    isSelected={auditStatusFilter === 'missing'}
-                    onChange={(_e, selected) => {
-                      if (selected) setAuditStatusFilter('missing');
-                      else if (auditStatusFilter === 'missing') setAuditStatusFilter('all');
-                    }}
-                  />
+                  <Tooltip {...auditStatusTooltipProps} content={AUDIT_FILTER_ALL_TOOLTIP}>
+                    <span style={{ display: 'inline-block' }}>
+                      <ToggleGroupItem
+                        text="All"
+                        isSelected={auditStatusFilter === 'all'}
+                        onChange={(_e, selected) => {
+                          if (selected) setAuditStatusFilter('all');
+                        }}
+                      />
+                    </span>
+                  </Tooltip>
+                  <Tooltip {...auditStatusTooltipProps} content={AUDIT_STATUS_TOOLTIPS.ready}>
+                    <span style={{ display: 'inline-block' }}>
+                      <ToggleGroupItem
+                        text="Ready"
+                        isSelected={auditStatusFilter === 'ready'}
+                        onChange={(_e, selected) => {
+                          if (selected) setAuditStatusFilter('ready');
+                          else if (auditStatusFilter === 'ready') setAuditStatusFilter('all');
+                        }}
+                      />
+                    </span>
+                  </Tooltip>
+                  <Tooltip {...auditStatusTooltipProps} content={AUDIT_STATUS_TOOLTIPS.progress}>
+                    <span style={{ display: 'inline-block' }}>
+                      <ToggleGroupItem
+                        text="In progress"
+                        isSelected={auditStatusFilter === 'progress'}
+                        onChange={(_e, selected) => {
+                          if (selected) setAuditStatusFilter('progress');
+                          else if (auditStatusFilter === 'progress') setAuditStatusFilter('all');
+                        }}
+                      />
+                    </span>
+                  </Tooltip>
+                  <Tooltip {...auditStatusTooltipProps} content={AUDIT_STATUS_TOOLTIPS.missing}>
+                    <span style={{ display: 'inline-block' }}>
+                      <ToggleGroupItem
+                        text="Missing"
+                        isSelected={auditStatusFilter === 'missing'}
+                        onChange={(_e, selected) => {
+                          if (selected) setAuditStatusFilter('missing');
+                          else if (auditStatusFilter === 'missing') setAuditStatusFilter('all');
+                        }}
+                      />
+                    </span>
+                  </Tooltip>
                 </ToggleGroup>
               </Flex>
             </CardHeader>
